@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>متجر زكي - المساعد الذكي</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #0a0a0a;
+    --surface:      #141414;
+    --surface2:     #1c1c1c;
+    --border:       #2a2a2a;
+    --accent:       #c8a96e;
+    --accent2:      #e8c98e;
+    --accent-dim:   rgba(200,169,110,0.12);
+    --text:         #f0ece4;
+    --text-muted:   #666;
+    --user-bubble:  #c8a96e;
+    --bot-bubble:   #1a1a1a;
+    --green:        #4ade80;
+    --red:          #f87171;
+    --blue:         #60a5fa;
+    --whatsapp:     #25D366;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 800px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  /* Header */
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .logo {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .header-info h1 { font-size: 15px; font-weight: 700; }
+  .header-info span { font-size: 11px; color: var(--text-muted); }
+  .status-dot {
+    width: 7px; height: 7px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-right: auto;
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  /* Info bar (name + phone) */
+  .info-bar {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    background: var(--bg);
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .info-bar input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 12px;
+    flex: 1;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .info-bar input:focus { border-color: var(--accent); }
+  .info-bar input::placeholder { color: var(--text-muted); }
+
+  /* Location bar */
+  .location-bar {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .loc-icon { font-size: 14px; color: var(--text-muted); }
+  .loc-input-wrap {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 6px;
+    transition: border-color 0.2s;
+  }
+  .loc-input-wrap:focus-within { border-color: var(--accent); }
+  .loc-input-wrap input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 12px;
+    padding: 6px 0;
+    flex: 1;
+  }
+  .loc-input-wrap input::placeholder { color: var(--text-muted); }
+  .loc-clear {
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    font-size: 13px; padding: 2px 4px;
+    display: none;
+  }
+  .loc-clear.show { display: block; }
+  .loc-clear:hover { color: var(--red); }
+
+  .gps-btn {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: var(--accent);
+    font-family: 'Cairo', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .gps-btn:hover { background: rgba(200,169,110,0.22); }
+  .gps-btn.active {
+    background: var(--accent);
+    color: #1a1100;
+  }
+  .gps-btn.loading { opacity: 0.6; pointer-events: none; }
+
+  .loc-badge {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .loc-badge.show { display: flex; }
+
+  /* Messages */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 3px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 82%;
+    animation: fadeUp 0.22s ease;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .msg.user { align-self: flex-start; align-items: flex-start; }
+  .msg.bot  { align-self: flex-end;   align-items: flex-end; }
+
+  .bubble {
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble {
+    background: var(--user-bubble);
+    color: #1a1100;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot .bubble {
+    background: var(--bot-bubble);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.user .bubble img.uploaded-img {
+    max-width: 180px; max-height: 180px;
+    border-radius: 8px; display: block;
+    margin-bottom: 5px; object-fit: cover;
+  }
+  .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
+
+  /* Product cards */
+  .products-grid {
+    display: flex; flex-direction: column;
+    gap: 7px; margin-top: 8px;
+    width: 100%; max-width: 320px;
+  }
+  .product-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex; gap: 10px; align-items: center;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .product-card:hover { border-color: var(--accent); transform: translateX(-2px); }
+  .product-card img {
+    width: 48px; height: 48px;
+    object-fit: contain; border-radius: 8px;
+    background: #111; padding: 3px; flex-shrink: 0;
+  }
+  .product-info { flex: 1; min-width: 0; }
+  .product-title { font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .product-price { font-size: 12px; color: var(--accent); font-weight: 700; margin-top: 2px; }
+  .buy-btn {
+    background: var(--accent); color: #1a1100;
+    border: none; border-radius: 7px;
+    padding: 5px 9px; font-size: 10.5px; font-weight: 700;
+    cursor: pointer; font-family: 'Cairo', sans-serif;
+    transition: background 0.2s; white-space: nowrap; flex-shrink: 0;
+  }
+  .buy-btn:hover { background: var(--accent2); }
+  .product-store {
+    font-size: 10px; color: var(--blue); margin-top: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .store-km {
+    background: rgba(96,165,250,0.1);
+    border: 1px solid rgba(96,165,250,0.2);
+    border-radius: 4px; padding: 1px 5px;
+    font-size: 9px;
+  }
+  .whatsapp-link {
+    font-size: 10px;
+    color: var(--whatsapp);
+    margin-top: 3px;
+    display: inline-block;
+  }
+  .whatsapp-link a {
+    color: var(--whatsapp);
+    text-decoration: none;
+  }
+
+  /* Stores grid */
+  .stores-grid {
+    display: flex; flex-direction: column;
+    gap: 7px; margin-top: 8px;
+    width: 100%; max-width: 340px;
+  }
+  .store-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 11px 13px;
+    display: flex; align-items: center; gap: 10px;
+    animation: fadeUp 0.25s ease;
+    transition: border-color 0.2s;
+  }
+  .store-card:hover { border-color: var(--blue); }
+  .store-rank {
+    width: 26px; height: 26px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    flex-shrink: 0;
+  }
+  .store-info { flex: 1; min-width: 0; }
+  .store-name { font-size: 12.5px; font-weight: 700; }
+  .store-gov  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .store-dist {
+    font-size: 11px; color: var(--blue);
+    background: rgba(96,165,250,0.1);
+    border: 1px solid rgba(96,165,250,0.25);
+    border-radius: 6px;
+    padding: 3px 8px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .store-phone {
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Typing */
+  .typing { display: flex; gap: 4px; padding: 12px 14px; }
+  .typing span {
+    width: 6px; height: 6px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); }
+    30%          { transform: translateY(-5px); }
+  }
+
+  /* Input area */
+  .input-area {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; flex-direction: column; gap: 7px;
+    flex-shrink: 0;
+  }
+  .img-preview {
+    display: none;
+    align-items: center; gap: 8px;
+    padding: 7px 10px;
+    background: var(--bg);
+    border: 1px dashed var(--accent);
+    border-radius: 9px;
+  }
+  .img-preview.show { display: flex; }
+  .img-preview img { width: 36px; height: 36px; object-fit: cover; border-radius: 5px; }
+  .img-preview span { font-size: 11px; color: var(--text-muted); flex: 1; }
+  .img-preview button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; }
+  .img-preview button:hover { color: var(--red); }
+
+  .input-row { display: flex; gap: 8px; align-items: flex-end; }
+  .input-wrap {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 9px 12px;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.2s;
+  }
+  .input-wrap:focus-within { border-color: var(--accent); }
+  #msgInput {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text); font-family: 'Cairo', sans-serif;
+    font-size: 13.5px; resize: none; max-height: 100px;
+  }
+  #msgInput::placeholder { color: var(--text-muted); }
+  .icon-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; padding: 3px; border-radius: 7px;
+    transition: color 0.2s; font-size: 15px;
+  }
+  .icon-btn:hover { color: var(--accent); }
+  .icon-btn.recording { color: var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+  .send-btn {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border: none; border-radius: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: var(--accent2); transform: scale(1.05); }
+  .send-btn svg { width: 17px; height: 17px; fill: #1a1100; }
+
+  .welcome { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+  .welcome .icon { font-size: 38px; margin-bottom: 10px; }
+  .welcome h2 { font-size: 17px; color: var(--text); margin-bottom: 5px; }
+  .welcome p { font-size: 12.5px; }
+
+  #fileInput { display: none; }
+  
+  .order-confirm {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-size: 11px;
+  }
+  .whatsapp-button {
+    background: var(--whatsapp);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-top: 8px;
+    cursor: pointer;
+    font-family: 'Cairo', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .whatsapp-button:hover {
+    background: #128C7E;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">🛍️</div>
+    <div class="header-info">
+      <h1>متجر زكي</h1>
+      <span>المساعد الذكي</span>
+    </div>
+    <div class="status-dot"></div>
+  </header>
+
+  <div class="info-bar">
+    <input id="customerName"  placeholder="اسمك (اختياري)" />
+    <input id="customerPhone" placeholder="رقم تليفونك (اختياري)" />
+  </div>
+
+  <div class="location-bar">
+    <span class="loc-icon">📍</span>
+    <div class="loc-input-wrap">
+      <input id="locInput" placeholder="محافظتك أو مدينتك (مثال: قنا، أسيوط...)" />
+      <button class="loc-clear" id="locClear">✕</button>
+    </div>
+    <div class="loc-badge" id="locBadge">
+      <span>📡</span>
+      <span id="locBadgeText">GPS</span>
+    </div>
+    <button class="gps-btn" id="gpsBtn">
+      <span>📡</span> موقعي
+    </button>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="welcome">
+      <div class="icon">🛍️</div>
+      <h2>أهلاً بك في متجر زكي!</h2>
+      <p>اكتب، تكلم، أو ارفع صورة منتج 📷<br>حدد موقعك عشان نلاقيلك أقرب متجر 📍</p>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="img-preview" id="imgPreview">
+      <img id="previewThumb" src="" alt="">
+      <span id="previewName"></span>
+      <button onclick="clearImage()">✕</button>
+    </div>
+    <div class="input-row">
+      <div class="input-wrap">
+        <textarea id="msgInput" placeholder="اكتب رسالتك..." rows="1"></textarea>
+        <button class="icon-btn" id="voiceBtn" title="تسجيل صوتي">🎤</button>
+        <button class="icon-btn" id="imageBtn" title="ارفع صورة">📷</button>
+      </div>
+      <button class="send-btn" id="sendBtn">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webm">
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+const sessionId = crypto.randomUUID();
+
+let selectedProduct = null;
+let selectedImage   = null;
+let mediaRecorder   = null;
+let isRecording     = false;
+let userLat       = null;
+let userLon       = null;
+let locationText  = null;
+
+const messagesEl   = document.getElementById('messages');
+const inputEl      = document.getElementById('msgInput');
+const sendBtn      = document.getElementById('sendBtn');
+const voiceBtn     = document.getElementById('voiceBtn');
+const imageBtn     = document.getElementById('imageBtn');
+const fileInput    = document.getElementById('fileInput');
+const imgPreview   = document.getElementById('imgPreview');
+const previewThumb = document.getElementById('previewThumb');
+const previewName  = document.getElementById('previewName');
+const nameInput    = document.getElementById('customerName');
+const phoneInput   = document.getElementById('customerPhone');
+const locInput     = document.getElementById('locInput');
+const locClear     = document.getElementById('locClear');
+const locBadge     = document.getElementById('locBadge');
+const locBadgeText = document.getElementById('locBadgeText');
+const gpsBtn       = document.getElementById('gpsBtn');
+
+locInput.addEventListener('input', () => {
+  const val = locInput.value.trim();
+  locationText = val || null;
+  locClear.classList.toggle('show', !!val);
+  if (val) { userLat = null; userLon = null; setGpsInactive(); }
+});
+
+locClear.addEventListener('click', () => {
+  locInput.value = '';
+  locationText = null;
+  locClear.classList.remove('show');
+});
+
+gpsBtn.addEventListener('click', () => {
+  if (userLat) {
+    userLat = null; userLon = null;
+    setGpsInactive();
+    return;
+  }
+  if (!navigator.geolocation) {
+    alert('المتصفح مش بيدعم GPS');
+    return;
+  }
+  gpsBtn.classList.add('loading');
+  gpsBtn.innerHTML = '<span>⏳</span> جاري التحديد...';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      locationText = null;
+      locInput.value = '';
+      locClear.classList.remove('show');
+      setGpsActive();
+      gpsBtn.classList.remove('loading');
+      gpsBtn.innerHTML = '<span>✅</span> GPS محدد';
+    },
+    (err) => {
+      gpsBtn.classList.remove('loading');
+      gpsBtn.innerHTML = '<span>📡</span> موقعي';
+      alert('مش قادر يحدد موقعك: ' + err.message);
+    },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+});
+
+function setGpsActive() {
+  gpsBtn.classList.add('active');
+  locBadgeText.textContent = `${userLat.toFixed(3)}, ${userLon.toFixed(3)}`;
+  locBadge.classList.add('show');
+}
+
+function setGpsInactive() {
+  gpsBtn.classList.remove('active', 'loading');
+  gpsBtn.innerHTML = '<span>📡</span> موقعي';
+  locBadge.classList.remove('show');
+}
+
+function getLocationPayload() {
+  if (userLat && userLon) {
+    return { latitude: userLat, longitude: userLon, location_text: null };
+  }
+  if (locationText) {
+    return { location_text: locationText, latitude: null, longitude: null };
+  }
+  return { location_text: null, latitude: null, longitude: null };
+}
+
+imageBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  selectedImage = file;
+  previewThumb.src = URL.createObjectURL(file);
+  previewName.textContent = file.name;
+  imgPreview.classList.add('show');
+});
+function clearImage() {
+  selectedImage = null;
+  fileInput.value = '';
+  imgPreview.classList.remove('show');
+  previewThumb.src = '';
+}
+
+async function sendMessage(text) {
+  const hasText  = text.trim().length > 0;
+  const hasImage = !!selectedImage;
+  if (!hasText && !hasImage) return;
+
+  if (hasImage) { await sendImage(text, selectedImage); clearImage(); inputEl.value = ''; return; }
+
+  appendMessage('user', text);
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+
+  const typingId = showTyping();
+  try {
+    const loc = getLocationPayload();
+    const res = await fetch(`${API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        session_id: sessionId,
+        customer_name:    nameInput.value  || null,
+        customer_phone:   phoneInput.value || null,
+        selected_product: selectedProduct,
+        ...loc,
+      })
+    });
+    const data = await res.json();
+    removeTyping(typingId);
+    appendMessage('bot', data.response, data.products, data.nearby_stores, data.order_confirmation);
+    if (data.state === 'order_sent') selectedProduct = null;
+  } catch (error) {
+    removeTyping(typingId);
+    appendMessage('bot', '❌ تعذر الاتصال بالسيرفر.');
+    console.error(error);
+  }
+}
+
+async function sendImage(text, imageFile) {
+  appendImageMessage(imageFile, text || '📷 ابحث عن هذا المنتج');
+  const typingId = showTyping();
+  try {
+    const loc = getLocationPayload();
+    const formData = new FormData();
+    formData.append('image', imageFile, imageFile.name);
+    formData.append('session_id', sessionId);
+    if (nameInput.value)  formData.append('customer_name',  nameInput.value);
+    if (phoneInput.value) formData.append('customer_phone', phoneInput.value);
+    if (selectedProduct)  formData.append('selected_product', JSON.stringify(selectedProduct));
+    if (loc.location_text) formData.append('location_text', loc.location_text);
+    if (loc.latitude)     { formData.append('latitude',  loc.latitude);  formData.append('longitude', loc.longitude); }
+
+    const res  = await fetch(`${API}/image/chat`, { method: 'POST', body: formData });
+    const data = await res.json();
+    removeTyping(typingId);
+    appendMessage('bot', data.response, data.products, data.nearby_stores, data.order_confirmation);
+    if (data.state === 'order_sent') selectedProduct = null;
+  } catch (error) {
+    removeTyping(typingId);
+    appendMessage('bot', '❌ خطأ في تحليل الصورة.');
+    console.error(error);
+  }
+}
+
+function appendImageMessage(file, caption) {
+  removeWelcome();
+  const msg = document.createElement('div');
+  msg.className = 'msg user';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  const img = document.createElement('img');
+  img.className = 'uploaded-img';
+  img.src = URL.createObjectURL(file);
+  bubble.appendChild(img);
+  if (caption) bubble.appendChild(document.createTextNode(caption));
+  msg.appendChild(bubble);
+  addTime(msg);
+  messagesEl.appendChild(msg);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendMessage(role, text, products = null, nearbyStores = null, orderConfirmation = null) {
+  removeWelcome();
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (text && text.includes('wa.me')) {
+    bubble.innerHTML = text.replace(/(https?:\/\/wa\.me\/[^\s]+)/g, '<a href="$1" target="_blank" style="color: var(--whatsapp);">$1</a>');
+  } else {
+    bubble.textContent = text;
+  }
+  msg.appendChild(bubble);
+
+  if (products && products.length > 0) {
+    const grid = document.createElement('div');
+    grid.className = 'products-grid';
+    products.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      const storeTag = p.shop_name
+        ? `<div class="product-store">🏪 ${p.shop_name} — ${p.shop_governorate || ''} <span class="store-km">${p.shop_distance ?? ''} كم</span></div>`
+        : '';
+      const whatsappTag = p.shop_phone
+        ? `<div class="whatsapp-link">📱 <a href="https://wa.me/${p.shop_phone.replace(/[^0-9]/g, '')}" target="_blank">تواصل مع المتجر واتساب</a></div>`
+        : '';
+      card.innerHTML = `
+        <img src="${p.image || ''}" alt="${p.title}"
+             onerror="this.src='https://placehold.co/48x48/1a1a1a/666?text=📦'">
+        <div class="product-info">
+          <div class="product-title">${p.title}</div>
+          <div class="product-price">$${p.price}</div>
+          ${storeTag}
+          ${whatsappTag}
+        </div>
+        <button class="buy-btn">اشتري</button>
+      `;
+      card.querySelector('.buy-btn').addEventListener('click', () => {
+        selectedProduct = {
+          id:               p.id,
+          title:            p.title,
+          price:            p.price,
+          image:            p.image,
+          shop_id:          p.shop_id          || null,
+          shop_name:        p.shop_name        || null,
+          shop_governorate: p.shop_governorate || null,
+          shop_phone:       p.shop_phone       || null,
+        };
+        inputEl.value = 'هشتريه';
+        inputEl.focus();
+        document.querySelectorAll('.product-card').forEach(c => c.style.borderColor = '');
+        card.style.borderColor = 'var(--accent)';
+      });
+      grid.appendChild(card);
+    });
+    msg.appendChild(grid);
+  }
+
+  if (nearbyStores && nearbyStores.length > 0) {
+    const storesGrid = document.createElement('div');
+    storesGrid.className = 'stores-grid';
+    nearbyStores.forEach((store, idx) => {
+      const card = document.createElement('div');
+      card.className = 'store-card';
+      const whatsappLink = store.phone 
+        ? `<div class="whatsapp-link">📱 <a href="https://wa.me/${store.phone.replace(/[^0-9]/g, '')}" target="_blank">تواصل واتساب</a></div>`
+        : '';
+      card.innerHTML = `
+        <div class="store-rank">${idx + 1}</div>
+        <div class="store-info">
+          <div class="store-name">🏪 ${store.name}</div>
+          <div class="store-gov">📍 ${store.governorate}</div>
+          ${store.phone ? `<div class="store-phone">📞 ${store.phone}</div>` : ''}
+          ${whatsappLink}
+        </div>
+        <div class="store-dist">${store.distance_km || '?'} كم</div>
+      `;
+      storesGrid.appendChild(card);
+    });
+    msg.appendChild(storesGrid);
+  }
+  
+  if (orderConfirmation && orderConfirmation.vendor_phone) {
+    const confirmDiv = document.createElement('div');
+    confirmDiv.className = 'order-confirm';
+    const cleanPhone = orderConfirmation.vendor_phone.replace(/[^0-9]/g, '');
+    const whatsappMsg = `مرحباً، لدي طلب من متجر زكي%0A%0Aالمنتج: ${orderConfirmation.product_name}%0Aالسعر: $${orderConfirmation.product_price}%0Aالعميل: ${orderConfirmation.customer_name}%0Aرقم العميل: ${orderConfirmation.customer_phone}`;
+    confirmDiv.innerHTML = `
+      <div>✅ رقم الطلب: ${orderConfirmation.order_id}</div>
+      <div>📦 المنتج: ${orderConfirmation.product_name}</div>
+      <div>💰 السعر: $${orderConfirmation.product_price}</div>
+      <button class="whatsapp-button" onclick="window.open('https://wa.me/${cleanPhone}?text=${whatsappMsg}', '_blank')">
+        📱 تواصل مع التاجر واتساب
+      </button>
+    `;
+    msg.appendChild(confirmDiv);
+  }
+
+  addTime(msg);
+  messagesEl.appendChild(msg);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeWelcome() {
+  const w = messagesEl.querySelector('.welcome');
+  if (w) w.remove();
+}
+
+function addTime(el) {
+  const t = document.createElement('div');
+  t.className = 'msg-time';
+  t.textContent = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  el.appendChild(t);
+}
+
+function showTyping() {
+  const id = 'typing-' + Date.now();
+  const msg = document.createElement('div');
+  msg.className = 'msg bot'; msg.id = id;
+  msg.innerHTML = `<div class="bubble typing"><span></span><span></span><span></span></div>`;
+  messagesEl.appendChild(msg);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return id;
+}
+function removeTyping(id) { document.getElementById(id)?.remove(); }
+
+voiceBtn.addEventListener('click', async () => {
+  if (isRecording) { mediaRecorder?.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    const chunks = [];
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      isRecording = false;
+      voiceBtn.classList.remove('recording');
+      voiceBtn.textContent = '🎤';
+      stream.getTracks().forEach(t => t.stop());
+
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const loc  = getLocationPayload();
+      const formData = new FormData();
+      formData.append('audio', blob, 'audio.webm');
+      formData.append('session_id', sessionId);
+      if (nameInput.value)  formData.append('customer_name',  nameInput.value);
+      if (phoneInput.value) formData.append('customer_phone', phoneInput.value);
+      if (selectedProduct)  formData.append('selected_product', JSON.stringify(selectedProduct));
+      if (loc.location_text) formData.append('location_text', loc.location_text);
+      if (loc.latitude)     { formData.append('latitude', loc.latitude); formData.append('longitude', loc.longitude); }
+
+      appendMessage('user', '🎤 رسالة صوتية...');
+      const typingId = showTyping();
+      try {
+        const res  = await fetch(`${API}/voice/chat`, { method: 'POST', body: formData });
+        const data = await res.json();
+        removeTyping(typingId);
+        appendMessage('bot', data.response, data.products, data.nearby_stores, data.order_confirmation);
+        if (data.state === 'order_sent') selectedProduct = null;
+      } catch {
+        removeTyping(typingId);
+        appendMessage('bot', '❌ خطأ في معالجة الصوت.');
+      }
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    voiceBtn.classList.add('recording');
+    voiceBtn.textContent = '⏹️';
+  } catch {
+    alert('مش قادر اوصل للميكروفون.');
+  }
+});
+
+sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(inputEl.value); }
+});
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = inputEl.scrollHeight + 'px';
+});
+</script>
+</body>
+</html>

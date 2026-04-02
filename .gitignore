@@ -1,0 +1,61 @@
+# 🔹 Python
+__pycache__/
+*.py[cod]
+*.so
+
+# 🔹 Virtual Environment
+venv/
+env/
+ENV/
+
+# 🔹 Environment variables
+.env
+.env/
+
+# 🔹 Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# 🔹 Logs
+*.log
+
+# 🔹 SQLite DB (لو بتستخدمه)
+*.db
+*.sqlite3
+
+# 🔹 Data files (لو عندك داتا كبيرة)
+data/
+datasets/
+
+# 🔹 Model files (AI models)
+models/
+*.h5
+*.pt
+*.pth
+*.onnx
+
+# 🔹 VS Code
+.vscode/
+
+# 🔹 OS files
+.DS_Store
+Thumbs.db
+
+# 🔹 Temporary files
+*.tmp
+*.temp
+
+# 🔹 Cache
+.cache/
+
+# 🔹 Coverage reports
+htmlcov/
+.coverage
+
+# 🔹 Build files
+build/
+dist/
+*.egg-info/
+
+# 🔹 API keys / secrets
+config.json
+secrets.json
