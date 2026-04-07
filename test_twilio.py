@@ -1,6 +1,6 @@
 # test_twilio.py
 import asyncio
-from agents.twilio_service import get_twilio_service
+from agents.meta_service import get_twilio_service
 
 async def test_phone_formatting():
     """Test phone number formatting"""
