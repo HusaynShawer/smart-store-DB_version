@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import (
     Column, Integer, String, Float, Text,
-    DateTime, JSON, func, Boolean
+    DateTime, JSON, func, Boolean, text
 )
 from config.settings import get_settings
 
@@ -104,10 +104,30 @@ class SearchLogModel(Base):
     customer_phone= Column(String(30),  nullable=True)
     created_at    = Column(DateTime,    server_default=func.now())
 
+
+# ✅ FIX 1: دالة migration تضيف is_active لو مش موجود
+async def _migrate_stores_table():
+    """
+    تضيف كولوم is_active لو مش موجود في جدول stores.
+    بتحل مشكلة: Unknown column 'stores.is_active' in 'field list'
+    """
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("SELECT is_active FROM stores LIMIT 1"))
+            print("✅ كولوم is_active موجود بالفعل في جدول stores")
+        except Exception:
+            await conn.execute(text(
+                "ALTER TABLE stores ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+            print("✅ تم إضافة كولوم is_active لجدول stores بنجاح")
+
+
 async def create_all_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print("✅ All SQL tables created / verified.")
+    await _migrate_stores_table()
+
 
 async def close_db():
     await engine.dispose()

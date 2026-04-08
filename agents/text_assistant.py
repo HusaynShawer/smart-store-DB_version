@@ -486,6 +486,7 @@ class TextAssistant:
             google_api_key=settings.GEMINI_API_KEY,
         )
 
+        # ✅ FIX 3: callbacks=[] يمنع AttributeError في StdOutCallbackHandler
         agent = create_react_agent(
             llm=llm,
             tools=tools,
@@ -493,6 +494,7 @@ class TextAssistant:
         )
 
         return AgentExecutor(
+            callbacks=[],
             agent=agent,
             tools=tools,
             verbose=settings.AGENT_VERBOSE,

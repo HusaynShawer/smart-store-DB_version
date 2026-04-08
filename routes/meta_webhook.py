@@ -20,15 +20,18 @@ settings = get_settings()
 
 _assistant = TextAssistant()
 
+# ✅ FIX 2: سجل message IDs المعالجة عشان نمنع التكرار
+_processed_message_ids: set[str] = set()
+_MAX_PROCESSED_IDS = 1000  # بنمسح لما يوصل لـ 1000 عشان الـ memory ما تتملاش
+
 
 # ── GET: Webhook Verification ─────────────────────────────────────────────────
 @router.get("/webhook")
 async def verify_webhook(
-    hub_mode:       str = Query(None, alias="hub.mode"),
+    hub_mode:         str = Query(None, alias="hub.mode"),
     hub_verify_token: str = Query(None, alias="hub.verify_token"),
-    hub_challenge:  str = Query(None, alias="hub.challenge"),
+    hub_challenge:    str = Query(None, alias="hub.challenge"),
 ):
-    """Meta بتبعت request ده لما تضيف الـ webhook — لازم يرجع الـ challenge."""
     if hub_mode == "subscribe" and hub_verify_token == settings.META_VERIFY_TOKEN:
         logger.info("✅ Meta Webhook تم التحقق منه بنجاح")
         return PlainTextResponse(content=hub_challenge)
@@ -40,7 +43,7 @@ async def verify_webhook(
 # ── POST: Incoming Messages ───────────────────────────────────────────────────
 @router.post("/webhook")
 async def receive_message(request: Request):
-    """يستقبل رسائل WhatsApp من Meta ويردّ عليها."""
+    global _processed_message_ids
 
     raw_body = await request.body()
 
@@ -64,13 +67,25 @@ async def receive_message(request: Request):
         contacts = value.get("contacts", [])
 
         if not messages:
-            # Meta بتبعت أحياناً status updates — نتجاهلها
             return {"status": "ok"}
 
         msg          = messages[0]
+        msg_id       = msg.get("id", "")
         msg_type     = msg.get("type", "")
         sender_phone = msg.get("from", "")
         profile_name = contacts[0].get("profile", {}).get("name", "") if contacts else ""
+
+        # ✅ FIX 2: تجاهل الرسائل المكررة
+        if msg_id and msg_id in _processed_message_ids:
+            logger.info(f"⚠️  رسالة مكررة تم تجاهلها | ID: {msg_id}")
+            return {"status": "ok"}
+
+        # سجّل الـ message ID
+        if msg_id:
+            _processed_message_ids.add(msg_id)
+            # امسح القديم لو وصل الحد
+            if len(_processed_message_ids) > _MAX_PROCESSED_IDS:
+                _processed_message_ids = set(list(_processed_message_ids)[-500:])
 
         # ── 3. Rate Limiting ─────────────────────────────────────────────────
         if not check_rate_limit(sender_phone):
@@ -82,7 +97,7 @@ async def receive_message(request: Request):
             )
             return {"status": "rate_limited"}
 
-        # ── 4. نعالج النص فقط (بنتجاهل الصور/الصوت حالياً) ──────────────────
+        # ── 4. نعالج النص فقط ────────────────────────────────────────────────
         if msg_type != "text":
             meta = get_meta_service()
             await meta.send_message(
@@ -122,7 +137,6 @@ async def receive_message(request: Request):
 
     except Exception as exc:
         logger.error(f"❌ خطأ في معالجة الرسالة: {exc}", exc_info=True)
-        # نرجع 200 عشان Meta ما تعيدش المحاولة بشكل متكرر
         return {"status": "error", "detail": str(exc)}
 
 
