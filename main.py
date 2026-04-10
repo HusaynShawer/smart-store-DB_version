@@ -1,4 +1,6 @@
 # main.py
+import logging
+import logging.config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,14 +21,27 @@ from routes.analytics     import router as analytics_router
 
 settings = get_settings()
 
+# Logging Configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log') if settings.ENVIRONMENT == 'production' else logging.NullHandler(),
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f" {settings.APP_TITLE} v{settings.APP_VERSION} يعمل...")
+    logger.info(f"Starting {settings.APP_TITLE} v{settings.APP_VERSION}...")
     await create_all_tables()
+    logger.info("Database tables created/verified successfully")
     yield
     await close_db()
-    print(" إيقاف التشغيل...")
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
@@ -42,12 +57,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Customer routes ──────────────────────────────────────────────────────────
+# Customer routes
 app.include_router(chat_router)
 app.include_router(voice_router)
 app.include_router(image_router)
 
-# ── Admin CRUD routes ────────────────────────────────────────────────────────
+# Admin CRUD routes
 app.include_router(products_router)
 app.include_router(stores_router)
 app.include_router(orders_router)

@@ -1,4 +1,5 @@
 # config/database.py
+import logging
 from sqlalchemy.ext.asyncio import (
     AsyncSession, AsyncEngine,
     create_async_engine, async_sessionmaker,
@@ -10,6 +11,7 @@ from sqlalchemy import (
 )
 from config.settings import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 engine: AsyncEngine = create_async_engine(
@@ -105,34 +107,49 @@ class SearchLogModel(Base):
     created_at    = Column(DateTime,    server_default=func.now())
 
 
-# ✅ FIX 1: دالة migration تضيف is_active لو مش موجود
+# Migration and initialization functions
 async def _migrate_stores_table():
     """
-    تضيف كولوم is_active لو مش موجود في جدول stores.
-    بتحل مشكلة: Unknown column 'stores.is_active' in 'field list'
+    Add is_active column to stores table if it doesn't exist.
+    Resolves: Unknown column 'stores.is_active' in 'field list'
     """
     async with engine.begin() as conn:
         try:
             await conn.execute(text("SELECT is_active FROM stores LIMIT 1"))
-            print("✅ كولوم is_active موجود بالفعل في جدول stores")
-        except Exception:
-            await conn.execute(text(
-                "ALTER TABLE stores ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
-            ))
-            print("✅ تم إضافة كولوم is_active لجدول stores بنجاح")
+            logger.info("Column is_active already exists in stores table")
+        except Exception as e:
+            try:
+                await conn.execute(text(
+                    "ALTER TABLE stores ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE"
+                ))
+                logger.info("Successfully added is_active column to stores table")
+            except Exception as e:
+                logger.warning(f"Could not add is_active column: {e}")
 
 
 async def create_all_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("✅ All SQL tables created / verified.")
-    await _migrate_stores_table()
+    """Create or verify all database tables."""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("All SQL tables created/verified successfully")
+        await _migrate_stores_table()
+    except Exception as e:
+        logger.error("Error creating database tables", exc_info=True)
+        raise
 
 
 async def close_db():
-    await engine.dispose()
+    """Close database engine."""
+    try:
+        await engine.dispose()
+        logger.info("Database connection closed")
+    except Exception as e:
+        logger.error("Error closing database", exc_info=True)
+
 
 async def get_session() -> AsyncSession:
+    """Get database session for dependency injection."""
     async with AsyncSessionFactory() as session:
         try:
             yield session

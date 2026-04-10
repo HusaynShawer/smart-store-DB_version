@@ -5,8 +5,7 @@ from enum import Enum
 from datetime import datetime
 
 
-# ── Enums ─────────────────────────────────────────────────────────────────────
-
+# Enums for conversation states
 class ConversationState(str, Enum):
     GREETING         = "greeting"
     SEARCHING        = "searching"
@@ -14,17 +13,17 @@ class ConversationState(str, Enum):
     AWAITING_CONFIRM = "awaiting_confirm"
     ORDER_SENT       = "order_sent"
     LOCATING         = "locating"
+    ERROR            = "error"
 
 
-# ── Chat ──────────────────────────────────────────────────────────────────────
-
+# Chat Request/Response Models
 class ChatRequest(BaseModel):
-    message: str = Field(..., example="عايز فون في قنا")
+    message: str = Field(..., example="I need a phone in Cairo")
     session_id: Optional[str] = Field(None, example="user-123")
-    customer_name: Optional[str] = Field(None, example="أحمد محمد")
+    customer_name: Optional[str] = Field(None, example="Ahmed Mohamed")
     customer_phone: Optional[str] = Field(None, example="01012345678")
     selected_product: Optional[Dict[str, Any]] = Field(None)
-    location_text: Optional[str] = Field(None, example="قنا")
+    location_text: Optional[str] = Field(None, example="Cairo")
     latitude: Optional[float] = Field(None, example=26.1551)
     longitude: Optional[float] = Field(None, example=32.7160)
 
@@ -47,8 +46,7 @@ class ChatResponse(BaseModel):
     nearby_stores: Optional[List[StoreResult]] = None
 
 
-# ── Product ───────────────────────────────────────────────────────────────────
-
+# Product Models
 class RatingSchema(BaseModel):
     rate: float = 0.0
     count: int = 0
@@ -84,8 +82,7 @@ class ProductOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Store ─────────────────────────────────────────────────────────────────────
-
+# Store Models
 class StoreCreate(BaseModel):
     name: str
     governorate: str
@@ -93,7 +90,7 @@ class StoreCreate(BaseModel):
     lon: float
     phone: Optional[str] = None
     products: List[str] = Field(default_factory=list,
-                                 example=["phone", "laptop", "موبايل"])
+                                 example=["phone", "laptop", "mobile"])
 
 
 class StoreUpdate(BaseModel):

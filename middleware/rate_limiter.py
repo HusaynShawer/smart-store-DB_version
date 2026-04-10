@@ -1,9 +1,4 @@
-# middleware/rate_limiter.py
-"""
-Rate limiter بسيط في الذاكرة.
-كل رقم تليفون له حد أقصى 20 رسالة في الدقيقة.
-للـ production مع multiple workers استخدم Redis.
-"""
+
 import time
 from collections import defaultdict
 from config.settings import get_settings
