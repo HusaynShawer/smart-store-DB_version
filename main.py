@@ -27,7 +27,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('app.log') if settings.ENVIRONMENT == 'production' else logging.NullHandler(),
+        # File logging always enabled for debugging
+        logging.FileHandler('app.log'),
     ]
 )
 

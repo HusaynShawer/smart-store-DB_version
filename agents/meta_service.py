@@ -46,7 +46,7 @@ def verify_meta_signature(payload: bytes, signature_header: str) -> bool:
     يستخدم HMAC-SHA256 مع APP_SECRET.
     """
     if not settings.META_APP_SECRET:
-        logger.warning("⚠️  META_APP_SECRET غير مضبوط — تجاوز التحقق")
+        logger.warning(" META_APP_SECRET غير مضبوط — تجاوز التحقق")
         return True
 
     expected = "sha256=" + hmac.new(
@@ -62,9 +62,9 @@ class MetaService:
     def __init__(self):
         self._ok = bool(settings.META_ACCESS_TOKEN and settings.META_PHONE_NUMBER_ID)
         if self._ok:
-            logger.info("✅ Meta WhatsApp Service جاهز")
+            logger.info(" Meta WhatsApp Service جاهز")
         else:
-            logger.warning("⚠️  META_ACCESS_TOKEN أو META_PHONE_NUMBER_ID غير مضبوطين")
+            logger.warning("  META_ACCESS_TOKEN أو META_PHONE_NUMBER_ID غير مضبوطين")
 
     def is_available(self) -> bool:
         return self._ok
@@ -102,15 +102,15 @@ class MetaService:
                 if resp.status_code == 200:
                     data = resp.json()
                     msg_id = data.get("messages", [{}])[0].get("id", "")
-                    logger.info(f"✅ رسالة أُرسلت → {to_phone} | ID: {msg_id}")
+                    logger.info(f" رسالة أُرسلت → {to_phone} | ID: {msg_id}")
                     return {"success": True, "message_id": msg_id, "to": to_phone}
 
                 last_error = f"HTTP {resp.status_code}: {resp.text}"
-                logger.warning(f"⚠️  محاولة {attempt}/{settings.MESSAGE_MAX_RETRIES} فشلت: {last_error}")
+                logger.warning(f"  محاولة {attempt}/{settings.MESSAGE_MAX_RETRIES} فشلت: {last_error}")
 
             except httpx.RequestError as exc:
                 last_error = str(exc)
-                logger.warning(f"⚠️  محاولة {attempt} — خطأ شبكة: {exc}")
+                logger.warning(f"  محاولة {attempt} — خطأ شبكة: {exc}")
 
             if attempt < settings.MESSAGE_MAX_RETRIES:
                 await asyncio.sleep(settings.MESSAGE_RETRY_DELAY * attempt)
@@ -130,9 +130,9 @@ class MetaService:
                 )
                 db.add(row)
                 await db.commit()
-                logger.info(f"💾 رسالة فاشلة اتحفظت في DB لـ {to_phone}")
+                logger.info(f" رسالة فاشلة اتحفظت في DB لـ {to_phone}")
         except Exception as exc:
-            logger.error(f"❌ مش قادر يحفظ الرسالة الفاشلة: {exc}")
+            logger.error(f" مش قادر يحفظ الرسالة الفاشلة: {exc}")
 
     async def retry_failed_messages(self) -> dict:
         """يحاول يعيد إرسال الرسائل الفاشلة — يتنادى من background task."""
@@ -170,15 +170,15 @@ class MetaService:
         shop_name:      str = "",
     ) -> dict:
         message = (
-            f"🛍️ *طلب جديد — متجر زكي*\n"
+            f" *طلب جديد — متجر زكي*\n"
             f"─────────────────────\n"
-            f"📦 المنتج  : {product_name}\n"
-            f"💰 السعر   : {product_price} جنيه\n"
-            f"👤 العميل  : {customer_name}\n"
-            f"📞 تليفون  : {customer_phone}\n"
-            f"🔢 رقم الطلب: #{order_id}\n"
+            f" المنتج  : {product_name}\n"
+            f" السعر   : {product_price} جنيه\n"
+            f" العميل  : {customer_name}\n"
+            f" تليفون  : {customer_phone}\n"
+            f" رقم الطلب: #{order_id}\n"
             f"─────────────────────\n"
-            f"يرجى التواصل مع العميل لتأكيد الطلب ✅"
+            f"يرجى التواصل مع العميل لتأكيد الطلب "
         )
         return await self.send_message(vendor_phone, message)
 
@@ -191,11 +191,11 @@ class MetaService:
     ) -> dict:
         display = "0" + vendor_phone[2:] if vendor_phone.startswith("20") else vendor_phone
         message = (
-            f"✅ *تم إرسال طلبك بنجاح!*\n"
+            f" *تم إرسال طلبك بنجاح!*\n"
             f"─────────────────────\n"
-            f"📦 {product_name}\n"
-            f"🏪 المتجر : {vendor_name}\n"
-            f"📞 التاجر سيتواصل معك على رقمك قريباً 🙏\n"
+            f" {product_name}\n"
+            f"المتجر : {vendor_name}\n"
+            f" التاجر سيتواصل معك على رقمك قريباً \n"
             f"─────────────────────\n"
             f"شكراً لتسوقك مع متجر زكي 💚"
         )

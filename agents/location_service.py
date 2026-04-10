@@ -93,9 +93,9 @@ def format_stores_message(stores: list[dict], product_name: str) -> str:
         name = store.get("name", "متجر")
         phone = store.get("phone", "")
         lines.append(
-            f"{i}. 📍 {name} — {gov}\n"
-            f"   📏 المسافة: {dist} كم\n"
-            f"   📞 {phone}\n"
+            f"{i}.  {name} — {gov}\n"
+            f"    المسافة: {dist} كم\n"
+            f"    {phone}\n"
         )
 
     return "\n".join(lines)

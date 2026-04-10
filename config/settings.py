@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # ── App ───────────────────────────────────────────────────────────────────
-    APP_TITLE:   str = "متجر زكي AI Agent"
+    # App Configuration
+    APP_TITLE:   str = "Zaki Store AI Agent"
     APP_VERSION: str = "2.0.0"
 
     # ── Gemini ────────────────────────────────────────────────────────────────
