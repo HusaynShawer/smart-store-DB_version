@@ -1,101 +1,48 @@
 # agents/product_service.py
 """
-ProductService for searching products in MySQL database using async SQLAlchemy.
+ProductService — بيبحث عن المنتجات في MySQL.
+
+Search Pipeline:
+  1. QueryUnderstanding (LLM) → category + English terms + brand
+  2. Category-first DB fetch  → narrows to right domain
+  3. Token OR search           → each term is an independent ILIKE condition
+  4. Relevance scoring         → rank by token hits + rating
+  5. Related terms broadening  → if < 5 results
+  6. Category fallback         → last resort
 """
 import logging
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.database import AsyncSessionFactory, ProductModel
+from agents.query_understanding import get_query_understanding
 
 logger = logging.getLogger(__name__)
 
-# Arabic to English translation mapping for product searches
-AR_TO_EN = {
-    # Clothing
-    "تيشرت": "shirt",        "تي شيرت": "shirt",       "قميص": "shirt",
-    "جاكيت": "jacket",       "جاكت": "jacket",          "جاكيتة": "jacket",
-    "ملابس": "clothing",     "هدوم": "clothing",        "لبس": "clothing",
-    "بنطلون": "pants",       "جينز": "jeans",           "فستان": "dress",
-    "بلوزة": "blouse",       "سويتر": "sweater",        "هودي": "hoodie",
-
-    # Monitors and Displays
-    "شاشة": "monitor",       "شاشه": "monitor",         "شاشات": "monitor",
-    "شاشه كمبيوتر": "monitor","شاشة كمبيوتر": "monitor",
-    "مونيتور": "monitor",    "منيتور": "monitor",
-
-    # Electronics
-    "إلكترونيات": "electronics","الكترونيات": "electronics","الكترونيك": "electronics",
-
-    # Storage
-    "هارد": "drive",         "هارد ديسك": "drive",      "هارد خارجي": "drive",
-    "تخزين": "ssd",          "اس اس دي": "ssd",
-
-    # Jewelry
-    "مجوهرات": "jewelery",   "جواهر": "jewelery",
-    "خاتم": "ring",          "دبلة": "ring",            "خواتم": "ring",
-    "حلق": "earring",        "حلقان": "earring",
-    "ذهب": "gold",           "فضة": "silver",
-    "سلسلة": "necklace",     "سلسله": "necklace",       "عقد": "necklace",
-
-    # Phones and Computers
-    "تليفون": "phone",       "تلفون": "phone",          "هاتف": "phone",
-    "موبايل": "phone",       "موبيل": "phone",          "جوال": "phone",
-    "لابتوب": "laptop",      "كمبيوتر": "computer",     "حاسوب": "computer",
-    "ايفون": "phone",        "آيفون": "phone",          "ايفون": "iphone",
-    "سامسونج": "samsung",    "نوكيا": "nokia",          "شاومي": "xiaomi",
-    "هواوي": "huawei",       "اوبو": "oppo",            "ريلمي": "realme",
-    "ايباد": "tablet",       "تابلت": "tablet",
-
-    # Colors
-    "أبيض": "white",         "ابيض": "white",
-    "أسود": "black",         "اسود": "black",
-    "أحمر": "red",           "ازرق": "blue",            "أزرق": "blue",
-
-    # Bags
-    "حقيبة": "backpack",     "شنطة": "backpack",        "شنطه": "backpack",
-
-    # Gaming
-    "العاب": "gaming",       "جيمينج": "gaming",        "جيمنج": "gaming",
-    "سوني": "playstation",   "بلايستيشن": "playstation", "بلاي ستيشن": "playstation",
-    "اكس بوكس": "xbox",
-
-    # Beauty and Care
-    "ماسكارا": "mascara",    "مكياج": "makeup",         "عطر": "perfume",
-    "كريم": "cream",         "عناية": "skincare",
-
-    # English terms
-    "screen": "monitor",     "display": "monitor",      "mobile": "phone",
+RELATED_TERMS: dict[str, list[str]] = {
+    "ring":         ["ring", "jewelry", "jewelery", "gold", "necklace", "bracelet"],
+    "phone":        ["phone", "mobile", "iphone", "samsung", "smartphone"],
+    "iphone":       ["iphone", "phone", "apple", "smartphone"],
+    "samsung":      ["samsung", "galaxy", "phone", "smartphone"],
+    "laptop":       ["laptop", "computer", "notebook", "macbook", "pro"],
+    "macbook":      ["macbook", "laptop", "apple", "notebook", "computer"],
+    "computer":     ["computer", "laptop", "macbook", "notebook"],
+    "shirt":        ["shirt", "clothing", "tshirt", "men's clothing"],
+    "jacket":       ["jacket", "shirt", "coat", "clothing", "men's clothing"],
+    "jewelry":      ["jewelry", "jewelery", "ring", "gold", "necklace", "earring"],
+    "jewelery":     ["jewelery", "jewelry", "ring", "gold", "necklace", "earring"],
+    "gold":         ["gold", "ring", "jewelry", "jewelery", "necklace"],
+    "earring":      ["earring", "jewelry", "jewelery", "ring"],
+    "necklace":     ["necklace", "jewelry", "jewelery", "gold", "ring"],
+    "monitor":      ["monitor", "screen", "display", "electronics"],
+    "electronics":  ["electronics", "phone", "laptop", "monitor", "tablet"],
+    "gaming":       ["gaming", "playstation", "xbox", "electronics"],
+    "backpack":     ["backpack", "bag", "clothing"],
+    "perfume":      ["perfume", "fragrance", "cologne"],
 }
-
-# Related terms mapping to broaden search results
-RELATED_TERMS = {
-    "ring":       ["ring", "jewelry", "jewelery", "gold", "necklace", "bracelet"],
-    "phone":      ["phone", "mobile", "iphone", "samsung", "smartphone"],
-    "laptop":     ["laptop", "computer", "notebook", "pc"],
-    "shirt":      ["shirt", "clothing", "tshirt", "jacket", "men's clothing"],
-    "jacket":     ["jacket", "shirt", "clothing", "men's clothing"],
-    "jewelry":    ["jewelry", "jewelery", "ring", "gold", "necklace", "earring"],
-    "jewelery":   ["jewelery", "jewelry", "ring", "gold", "necklace", "earring"],
-    "gold":       ["gold", "ring", "jewelry", "jewelery", "necklace"],
-    "earring":    ["earring", "jewelry", "jewelery", "ring", "gold"],
-    "necklace":   ["necklace", "jewelry", "jewelery", "gold", "ring"],
-    "monitor":    ["monitor", "screen", "display", "electronics"],
-    "electronics":["electronics", "phone", "laptop", "monitor", "tablet"],
-}
-
-
-def _translate(query: str) -> str:
-    """Translate Arabic search terms to English equivalents."""
-    q = query.lower().strip()
-    for ar in sorted(AR_TO_EN.keys(), key=len, reverse=True):
-        if ar in q:
-            q = q.replace(ar, AR_TO_EN[ar])
-    return q
 
 
 def _row_to_dict(row: ProductModel) -> dict:
-    """Convert database ProductModel row to dictionary."""
     return {
         "id":          row.id,
         "title":       row.title,
@@ -110,129 +57,157 @@ def _row_to_dict(row: ProductModel) -> dict:
     }
 
 
-class _MySQLProductService:
-    """Service for searching and retrieving products from MySQL database."""
+def _score_row(row: ProductModel, terms: list[str]) -> float:
+    title = (row.title       or "").lower()
+    desc  = (row.description or "").lower()
+    cat   = (row.category    or "").lower()
+    score = 0.0
+    for term in terms:
+        t = term.lower()
+        if t in title:
+            score += 1.0
+        if t in desc:
+            score += 0.3
+        if t in cat:
+            score += 0.4
+    try:
+        score += (float(row.rating_rate) / 5.0) * 0.5
+    except Exception:
+        pass
+    return score
 
-    async def _search_with_term(self, session: AsyncSession, term: str, limit: int) -> list:
-        """Search products by a single term in title, description, or category."""
-        like = f"%{term}%"
+
+class _MySQLProductService:
+
+    async def _fetch_by_category(
+        self, session: AsyncSession, category: str, limit: int
+    ) -> list[ProductModel]:
         stmt = (
             select(ProductModel)
-            .where(
-                or_(
-                    ProductModel.title.ilike(like),
-                    ProductModel.description.ilike(like),
-                    ProductModel.category.ilike(like),
-                )
-            )
+            .where(ProductModel.category.ilike(f"%{category}%"))
             .limit(limit)
         )
-        result = await session.execute(stmt)
-        return result.scalars().all()
+        return (await session.execute(stmt)).scalars().all()
 
-    async def search(self, query: str, limit: int = 10) -> list:
-        """
-        Search for products with multiple fallback strategies.
-        
-        Strategy:
-        1. Translate Arabic terms to English and search
-        2. Fallback to original Arabic if no results
-        3. Search related terms if less than 5 results
-        4. Last resort: search same category as first result
-        """
+    async def _fetch_by_terms(
+        self, session: AsyncSession, terms: list[str], limit: int
+    ) -> list[ProductModel]:
+        if not terms:
+            return []
+        conditions = []
+        for term in terms:
+            like = f"%{term}%"
+            conditions += [
+                ProductModel.title.ilike(like),
+                ProductModel.description.ilike(like),
+                ProductModel.category.ilike(like),
+            ]
+        stmt = select(ProductModel).where(or_(*conditions)).limit(limit)
+        return (await session.execute(stmt)).scalars().all()
+
+    async def _fetch_related(
+        self, session: AsyncSession, terms: list[str], seen_ids: set, limit: int
+    ) -> list[ProductModel]:
+        expanded: list[str] = []
+        for term in terms:
+            expanded += RELATED_TERMS.get(term.lower(), [])
+        expanded = list(dict.fromkeys(expanded))
+        if not expanded:
+            return []
+        extra: list[ProductModel] = []
+        rows = await self._fetch_by_terms(session, expanded, limit)
+        for r in rows:
+            if r.id not in seen_ids:
+                extra.append(r)
+                seen_ids.add(r.id)
+        return extra
+
+    async def search(self, query: str, limit: int = 10) -> list[dict]:
+        if not query or not query.strip():
+            return []
         try:
+            # ── Step 1: LLM understands query ─────────────────────────────────
+            qu     = get_query_understanding()
+            intent = qu.understand(query)
+
+            category = intent.get("category")
+            terms    = intent.get("terms") or []
+            brand    = intent.get("brand")
+
+            if brand and brand.lower() not in [t.lower() for t in terms]:
+                terms.append(brand.lower())
+
+            logger.info(f"[PS] query='{query}' | category={category} | terms={terms}")
+
             async with AsyncSessionFactory() as session:
-                translated = _translate(query)
-                logger.info(f"Searching for: {query} (translated: {translated})")
+                scored_map: dict[int, tuple[ProductModel, float]] = {}
 
-                # Primary search
-                rows = await self._search_with_term(session, translated, limit)
+                # ── Step 2: Category-first ────────────────────────────────────
+                if category:
+                    for row in await self._fetch_by_category(session, category, limit * 3):
+                        scored_map[row.id] = (row, _score_row(row, terms))
 
-                # Fallback: try original Arabic if translation gave no results
-                if not rows and translated != query.lower().strip():
-                    logger.debug(f"Retrying with original Arabic term: {query}")
-                    rows = await self._search_with_term(session, query.strip(), limit)
+                # ── Step 3: Token OR search ───────────────────────────────────
+                if len(scored_map) < limit and terms:
+                    for row in await self._fetch_by_terms(session, terms, limit * 3):
+                        new_score = _score_row(row, terms)
+                        if row.id not in scored_map or new_score > scored_map[row.id][1]:
+                            scored_map[row.id] = (row, new_score)
 
-                # Broadened search: if less than 5 results, search related terms
-                if len(rows) < 5:
-                    seen_ids = {r.id for r in rows}
-                    related = RELATED_TERMS.get(translated.lower(), [])
-                    logger.debug(f"Searching related terms: {related}")
+                # ── Step 4: Related terms broadening ─────────────────────────
+                if len(scored_map) < 5:
+                    for row in await self._fetch_related(
+                        session, terms, set(scored_map.keys()), limit * 2
+                    ):
+                        scored_map[row.id] = (row, _score_row(row, terms) * 0.6)
 
-                    for term in related:
-                        if len(rows) >= 10:
-                            break
-                        extra = await self._search_with_term(session, term, limit)
-                        for r in extra:
-                            if r.id not in seen_ids:
-                                rows.append(r)
-                                seen_ids.add(r.id)
-                            if len(rows) >= 10:
-                                break
+                # ── Step 5: Category fallback ─────────────────────────────────
+                if len(scored_map) < 3 and scored_map:
+                    first_cat = next(iter(scored_map.values()))[0].category
+                    for row in await self._fetch_by_category(session, first_cat, limit):
+                        if row.id not in scored_map:
+                            scored_map[row.id] = (row, _score_row(row, terms) * 0.3)
 
-                # Last resort: return products from same category
-                if len(rows) < 5 and rows:
-                    category = rows[0].category
-                    seen_ids = {r.id for r in rows}
-                    logger.debug(f"Searching category fallback: {category}")
-                    cat_stmt = (
-                        select(ProductModel)
-                        .where(ProductModel.category.ilike(f"%{category}%"))
-                        .limit(limit)
+                ranked = sorted(scored_map.values(), key=lambda x: x[1], reverse=True)
+                result = [_row_to_dict(r) for r, _ in ranked[:limit]]
+
+                if ranked:
+                    logger.info(
+                        f"[PS] {len(result)} results | "
+                        f"top: '{ranked[0][0].title}' score={ranked[0][1]:.2f}"
                     )
-                    cat_result = await session.execute(cat_stmt)
-                    for r in cat_result.scalars().all():
-                        if r.id not in seen_ids:
-                            rows.append(r)
-                            seen_ids.add(r.id)
-                        if len(rows) >= 10:
-                            break
-
-                result = [_row_to_dict(r) for r in rows[:10]]
-                logger.info(f"Found {len(result)} products for query: {query}")
+                else:
+                    logger.warning(f"[PS] No results for '{query}'")
                 return result
-                
-        except Exception as e:
-            logger.error(f"Error searching for products: {query}", exc_info=True)
+
+        except Exception:
+            logger.error(f"[PS] Error searching '{query}'", exc_info=True)
             return []
 
-    async def by_category(self, category: str, limit: int = 10) -> list:
-        """Get products filtered by category."""
+    async def by_category(self, category: str, limit: int = 10) -> list[dict]:
         try:
             async with AsyncSessionFactory() as session:
-                stmt = (
-                    select(ProductModel)
-                    .where(ProductModel.category.ilike(f"%{category}%"))
-                    .limit(limit)
-                )
-                result = await session.execute(stmt)
-                products = [_row_to_dict(r) for r in result.scalars().all()]
-                logger.info(f"Retrieved {len(products)} products from category: {category}")
-                return products
-        except Exception as e:
-            logger.error(f"Error retrieving products by category: {category}", exc_info=True)
+                rows = await self._fetch_by_category(session, category, limit)
+                return [_row_to_dict(r) for r in rows]
+        except Exception:
+            logger.error(f"[PS] Error in by_category '{category}'", exc_info=True)
             return []
 
-    async def get_product_by_id(self, product_id: int) -> dict:
-        """Get a single product by ID."""
+    async def get_product_by_id(self, product_id: int) -> dict | None:
         try:
             async with AsyncSessionFactory() as session:
-                stmt = select(ProductModel).where(ProductModel.id == product_id)
-                result = await session.execute(stmt)
-                row = result.scalar_one_or_none()
-                if row:
-                    logger.debug(f"Retrieved product: {product_id}")
-                    return _row_to_dict(row)
-                logger.warning(f"Product not found: {product_id}")
-                return None
-        except Exception as e:
-            logger.error(f"Error retrieving product by ID: {product_id}", exc_info=True)
+                row = await session.get(ProductModel, product_id)
+                return _row_to_dict(row) if row else None
+        except Exception:
+            logger.error(f"[PS] Error fetching product {product_id}", exc_info=True)
             return None
 
-    def all_categories(self) -> list:
-        """Get list of all available product categories."""
-        return ["electronics", "jewelery", "men's clothing", "women's clothing",
-                "beauty", "fragrances", "furniture", "groceries"]
+    def all_categories(self) -> list[str]:
+        return [
+            "electronics", "jewelery",
+            "men's clothing", "women's clothing",
+            "beauty", "fragrances", "furniture", "groceries",
+        ]
 
 
-ProductService = _MySQLProductService
+ProductService = _MySQLProductService()
