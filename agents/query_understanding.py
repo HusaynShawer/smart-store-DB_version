@@ -1,148 +1,153 @@
-# agents/query_understanding.py
 """
 QueryUnderstanding — بيفهم قصد المستخدم قبل البحث.
 
-بدل ما نعتمد على dictionary ثابت،
-بنبعت الـ query للـ LLM يفهمها ويرجعلنا:
-  - category  : الكاتيجوري المناسبة
-  - terms     : كلمات بحث إنجليزية (multiple)
-  - brand     : البراند لو اتذكر
-  - intent    : وصف مختصر بالإنجليزي
-
-يتعامل مع:
-  ✅ عربي فصيح أو عامي
-  ✅ إنجليزي بأخطاء إملائية (labtop, mack poc)
-  ✅ أسماء تجارية عربية (ابل، سامسونج، نوكيا)
-  ✅ semantic: "شاشة لألعاب" → gaming monitor
+Uses Gemini/Gemma for text understanding (no Groq dependency).
 """
+
 import json
 import logging
 import re
-from typing import Optional
+from functools import lru_cache
+from typing import Optional, Dict, Tuple, List
 
-from groq import Groq
 from config.settings import get_settings
+from config.models_config import (
+    INTENT_MODEL,
+    INTENT_TEMPERATURE,
+    INTENT_MAX_TOKENS,
+)
+from agents.arabic_normalizer import normalize
 
 settings = get_settings()
-logger   = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = {
-    "electronics",
-    "jewelery",
-    "men's clothing",
-    "women's clothing",
-    "beauty",
-    "fragrances",
-    "furniture",
-    "groceries",
+    "electronics", "jewelery", "men's clothing", "women's clothing",
+    "beauty", "fragrances", "furniture", "groceries",
 }
 
-_SYSTEM_PROMPT = """
-You are a search query understanding assistant for an Egyptian e-commerce store (متجر زكي).
-The store sells: electronics, jewelry (jewelery), men's clothing, women's clothing, beauty, fragrances, furniture, groceries.
-
-The user will send a search query in Arabic (formal or Egyptian dialect), English, or mixed.
-Your job is to extract the search intent and return a JSON object ONLY — no extra text, no markdown.
-
-JSON format:
-{
-  "category": "<one of the store categories or null>",
-  "terms": ["<english search term 1>", "<english search term 2>", ...],
-  "brand": "<brand name in english or null>",
-  "intent": "<short description of what user wants, in English>"
+FAST_LOOKUP: Dict[str, Tuple[str, List[str], List[str]]] = {
+    "iphone": ("electronics", ["iphone", "apple", "phone"], ["ايفون", "آيفون"]),
+    "samsung": ("electronics", ["samsung", "galaxy", "phone"], ["سامسونج"]),
+    "macbook": ("electronics", ["macbook", "laptop", "apple"], ["ماك بوك"]),
+    "mac": ("electronics", ["macbook", "laptop", "apple"], ["ماك"]),
+    "laptop": ("electronics", ["laptop", "computer"], ["لابتوب"]),
+    "mobile": ("electronics", ["phone", "mobile"], ["موبايل"]),
+    "phone": ("electronics", ["phone", "mobile"], ["موبايل"]),
+    "ايفون": ("electronics", ["iphone", "apple"], ["ايفون"]),
+    "سامسونج": ("electronics", ["samsung", "galaxy"], ["سامسونج"]),
+    "لابتوب": ("electronics", ["laptop", "computer"], ["لابتوب"]),
+    "موبايل": ("electronics", ["phone", "mobile"], ["موبايل"]),
+    "خاتم": ("jewelery", ["ring", "gold"], ["خاتم"]),
+    "ذهب": ("jewelery", ["gold", "ring"], ["ذهب"]),
+    "جاكيت": ("men's clothing", ["jacket", "coat"], ["جاكيت"]),
 }
 
-Rules:
-- "terms" must be in ENGLISH and cover synonyms + related models
-  Examples:
-    "labtop" / "لابتوب" / "كمبيوتر محمول" / "mack poc" → terms: ["laptop", "macbook", "notebook", "computer"]
-    "موبايل سامسونج" / "samsung phone"                  → terms: ["samsung", "galaxy", "phone", "smartphone"]
-    "خاتم ذهب" / "gold ring"                           → terms: ["gold", "ring", "jewelry", "jewelery"]
-    "جاكيت شتوي" / "winter jacket"                      → terms: ["jacket", "winter", "coat", "men's clothing"]
-    "ايفون" / "iphone" / "apple phone"                 → terms: ["iphone", "apple", "phone", "smartphone"]
-- category must be exactly one of: electronics, jewelery, men's clothing, women's clothing, beauty, fragrances, furniture, groceries — or null
-- Fix typos silently (labtop→laptop, mack poc→macbook)
-- For vague queries like "هدية" (gift) — return null category and broad terms
-- Return ONLY the JSON object. No markdown, no explanation.
-""".strip()
+_SYSTEM_PROMPT = """You are a search query understanding assistant for an Egyptian e-commerce store (متجر زكي).
+Return ONLY a JSON object with no markdown:
+{"category": "", "terms": [], "synonyms": [], "brand": "", "intent": ""}
+Terms must be in English, synonyms in Arabic."""
+
+
+def _check_fast_path(query: str) -> Optional[dict]:
+    tokens = query.lower().split()
+    for token in tokens:
+        if token in FAST_LOOKUP:
+            category, terms, synonyms = FAST_LOOKUP[token]
+            return {"category": category, "terms": terms, "synonyms": synonyms, "brand": terms[0], "intent": " ".join(terms)}
+    return None
+
+
+def _call_gemini(query: str) -> str:
+    """Call Gemini/Gemma API for query understanding."""
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        logger.error("google-generativeai not installed. Run: pip install google-generativeai")
+        raise
+    
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel(INTENT_MODEL)
+    
+    response = model.generate_content(
+        contents=[
+            {"role": "user", "parts": [_SYSTEM_PROMPT]},
+            {"role": "user", "parts": [query]}
+        ],
+        generation_config=genai.GenerationConfig(
+            temperature=INTENT_TEMPERATURE,
+            max_output_tokens=INTENT_MAX_TOKENS,
+        )
+    )
+    return response.text
+
+
+def _cached_understand(query_normalized: str) -> str:
+    return _call_gemini(query_normalized)
+
+
+_cached_understand_lru = lru_cache(maxsize=512)(_cached_understand)
 
 
 class QueryUnderstanding:
-
     def __init__(self):
-        self._client = Groq(api_key=settings.GROQ_API_KEY)
+        self._client = None
+        if settings.GEMINI_API_KEY:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=settings.GEMINI_API_KEY)
+                self._client = genai
+                logger.info("[QueryUnderstanding] Gemini client ready")
+            except ImportError:
+                logger.warning("[QueryUnderstanding] google-generativeai not installed")
+        else:
+            logger.warning("[QueryUnderstanding] No GEMINI_API_KEY, using FAST_LOOKUP fallback")
 
     def understand(self, query: str) -> dict:
-        """
-        Synchronous wrapper — parses query and returns structured intent.
-        Falls back to basic tokenization if LLM fails.
-
-        Returns:
-          {
-            "category": str | None,
-            "terms":    list[str],
-            "brand":    str | None,
-            "intent":   str,
-          }
-        """
         if not query or not query.strip():
-            return {"category": None, "terms": [], "brand": None, "intent": ""}
+            return {"category": None, "terms": [], "synonyms": [], "brand": None, "intent": ""}
 
-        try:
-            response = self._client.chat.completions.create(
-                model="llama-3.3-70b-versatile",   # fast + smart, great Arabic
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user",   "content": query.strip()},
-                ],
-                max_tokens=200,
-                temperature=0.1,   # low temperature = consistent structured output
-            )
+        query_normalized = normalize(query)
+        
+        # Fast path for common terms
+        fast_result = _check_fast_path(query_normalized)
+        if fast_result:
+            return fast_result
 
-            raw = response.choices[0].message.content.strip()
-
-            # Strip accidental markdown code fences
-            raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
-
-            parsed = json.loads(raw)
-
-            # Validate / sanitise
-            category = parsed.get("category")
-            if category and category.lower() not in VALID_CATEGORIES:
-                category = None
-
-            terms = [str(t).lower().strip() for t in parsed.get("terms", []) if t]
-            brand = parsed.get("brand") or None
-            intent = parsed.get("intent", query)
-
-            logger.info(
-                f"[QU] '{query}' → category={category}, "
-                f"terms={terms}, brand={brand}"
-            )
+        # Fallback if no Gemini key
+        if not settings.GEMINI_API_KEY:
             return {
-                "category": category,
-                "terms":    terms,
-                "brand":    brand,
-                "intent":   intent,
+                "category": None,
+                "terms": [t for t in query_normalized.lower().split() if len(t) > 2],
+                "synonyms": [],
+                "brand": None,
+                "intent": query,
             }
 
-        except json.JSONDecodeError as exc:
-            logger.warning(f"[QU] JSON parse error for '{query}': {exc} | raw={raw!r}")
+        try:
+            raw = _cached_understand_lru(query_normalized)
+            raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+            parsed = json.loads(raw)
+            
+            return {
+                "category": parsed.get("category") if parsed.get("category") in VALID_CATEGORIES else None,
+                "terms": [str(t).lower().strip() for t in parsed.get("terms", []) if t],
+                "synonyms": [str(s).strip() for s in parsed.get("synonyms", []) if s],
+                "brand": parsed.get("brand"),
+                "intent": parsed.get("intent", query),
+            }
         except Exception as exc:
-            logger.warning(f"[QU] LLM call failed for '{query}': {exc}")
+            logger.warning(f"[QU] Gemini failed: {exc}")
+            return {
+                "category": None,
+                "terms": [t for t in query_normalized.lower().split() if len(t) > 2],
+                "synonyms": [],
+                "brand": None,
+                "intent": query,
+            }
 
-        # ── Fallback: basic tokenization (no LLM) ────────────────────────────
-        return {
-            "category": None,
-            "terms":    [t for t in query.lower().split() if len(t) > 1],
-            "brand":    None,
-            "intent":   query,
-        }
 
-
-# ── Singleton ─────────────────────────────────────────────────────────────────
 _qu: Optional[QueryUnderstanding] = None
-
 
 def get_query_understanding() -> QueryUnderstanding:
     global _qu
