@@ -35,29 +35,31 @@ RULES:
 1. Always reply in {language}.
 2. Use chat history for context - reference previously mentioned items.
 
-3. PURCHASE FLOW:
+3. SEARCH RULES — CRITICAL:
+   - Call search_products ONCE per product per conversation turn.
+   - If the Observation contains "FINAL RESULT: No products found" — stop immediately.
+     Do NOT call search_products again with the same or similar query.
+     Tell the user the item is not currently available and offer alternatives.
+   - If you already have search results in the Observation, go directly to Final Answer.
+
+4. PURCHASE FLOW:
    STEP 1: User mentions product - use search_products
    STEP 2: Show results clearly - ask which one they want
    STEP 3: User confirms - use place_order
-   Do NOT call place_order without confirmed product
-
-4. AFTER SEARCH RESULTS:
-   - Results are already in the Observation
-   - Go directly to: Thought: I now know - Final Answer
-   - Do NOT repeat same search
+   Do NOT call place_order without confirmed product.
 
 5. LOCATION FLOW:
    User mentions city/governorate WITH product - use find_nearby_stores
    Format: 'product | location'  example: 'phone | cairo'
 
 6. PRICE COMPARISON:
-   If user asks for cheaper or comparison - search_products then show sorted by price
+   If user asks for cheaper or comparison - search_products then show sorted by price.
 
 7. ORDER HISTORY:
-   If user asks about their orders - use get_order_history
+   If user asks about their orders - use get_order_history.
 
 8. Multi-product: comma-separated - 'laptop, phone'
-9. Greeting - greet back warmly
+9. Greeting - greet back warmly.
 
 Previous conversation:
 {chat_history}
@@ -95,6 +97,11 @@ class TextAssistant:
     def __init__(self):
         self._store   = ProductService()
         self._backend = BackendService()
+        self._llm     = ChatGoogleGenerativeAI(
+            model=settings.GEMINI_MODEL,
+            temperature=settings.GEMINI_TEMPERATURE,
+            google_api_key=settings.GEMINI_API_KEY,
+        )
 
     async def process(
         self,
@@ -158,7 +165,8 @@ class TextAssistant:
                 "nearby_stores":      None,
             }
 
-    # History Management
+    # ─── History Management ───────────────────────────────────────────────────
+
     async def _get_history(self, session_id: str) -> str:
         """Retrieve conversation history from database."""
         if not session_id:
@@ -208,7 +216,8 @@ class TextAssistant:
         except Exception as e:
             logger.error(f"Error saving history for session: {session_id}", exc_info=True)
 
-    # Search Logging
+    # ─── Search Logging ───────────────────────────────────────────────────────
+
     async def _log_search(self, query: str, count: int, customer_phone: str = None, gov: str = None):
         """Log search queries for analytics."""
         try:
@@ -223,7 +232,8 @@ class TextAssistant:
         except Exception as e:
             logger.warning(f"Failed to log search query: {query}", exc_info=True)
 
-    # Purchase Handling
+    # ─── Purchase Handling ────────────────────────────────────────────────────
+
     async def _handle_purchase(self, customer_name, customer_phone, selected_product) -> dict:
         """Handle purchase flow and order placement."""
         try:
@@ -293,7 +303,8 @@ class TextAssistant:
                 "products": None, "order_confirmation": None, "nearby_stores": None,
             }
 
-    # Agent Building
+    # ─── Agent Building ───────────────────────────────────────────────────────
+
     def _build_executor(
         self,
         request_products: list,
@@ -322,10 +333,13 @@ class TextAssistant:
                         logger.error(f"Search error for: {sub_q}", exc_info=products)
                         all_lines.append(f"No products available for '{sub_q}'.")
                         continue
-                    
+
                     if not products:
                         logger.warning(f"No products found for: {sub_q}")
-                        all_lines.append(f"No products found for '{sub_q}'.")
+                        all_lines.append(
+                            f"FINAL RESULT: No products found for '{sub_q}'. "
+                            "Do NOT search again. Tell the user this item is not available."
+                        )
                         continue
 
                     products = products[:5]
@@ -361,12 +375,12 @@ class TextAssistant:
                         self._log_search(sub_q, len(products), customer_phone)
                     )
 
-                all_lines.append(f"\nShow results in {language}, ask which product they want.")
+                # NOTE: No instruction strings here — the prompt handles presentation logic.
                 return "\n".join(all_lines)
-                
+
             except Exception as e:
                 logger.error(f"Error in search_and_summarize: {query}", exc_info=True)
-                return f"Unable to search for products. Please try again."
+                return "Unable to search for products. Please try again."
 
         async def find_nearby_stores(query: str) -> str:
             """Find stores near user location with specified product."""
@@ -403,7 +417,7 @@ class TextAssistant:
                             f"  {i}. Store: {s['name']} - {s['governorate']}\n"
                             f"     Distance: {s.get('distance_km', '?')} km | Phone: {s.get('phone', '')}"
                         )
-                    lines.append(f"\nShow in {language} these are closest stores. Suggest calling.")
+                    # NOTE: No instruction strings here — the prompt handles presentation logic.
                     return "\n".join(lines)
 
                 lines = [f"Search results for '{product}' sorted by distance from {loc}:\n"]
@@ -436,9 +450,9 @@ class TextAssistant:
                         f"     {store_info}\n"
                     )
 
-                lines.append(f"\nShow in {language} sorted by distance. Ask which product they want.")
+                # NOTE: No instruction strings here — the prompt handles presentation logic.
                 return "\n".join(lines)
-                
+
             except Exception as e:
                 logger.error(f"Error in find_nearby_stores: {query}", exc_info=True)
                 return "Unable to find nearby stores. Please try again."
@@ -456,7 +470,7 @@ class TextAssistant:
                     rows   = result.scalars().all()
 
                 if not rows:
-                    return f"No previous orders found for this phone number."
+                    return "No previous orders found for this phone number."
 
                 lines = ["Order History:\n"]
                 for r in rows:
@@ -465,7 +479,7 @@ class TextAssistant:
                         f"  Status: {r.status} | Date: {str(r.created_at)[:10]}"
                     )
                 return "\n".join(lines)
-                
+
             except Exception as e:
                 logger.error(f"Error retrieving order history: {phone}", exc_info=True)
                 return "Unable to retrieve order history. Please try again."
@@ -488,14 +502,15 @@ class TextAssistant:
                         })
                     request_products.append(enriched)
                     lines.append(f"{i}. {p['title']} | {p['price']} EGP | ID: {p['id']}")
-                lines.append(f"\nReply in {language} and ask which one they want.")
+                # NOTE: No instruction strings here — the prompt handles presentation logic.
                 return "\n".join(lines)
-                
+
             except Exception as e:
                 logger.error(f"Error browsing category: {category}", exc_info=True)
-                return f"Unable to browse category. Please try again."
+                return "Unable to browse category. Please try again."
 
-        # Tools Configuration
+        # ─── Tools Configuration ──────────────────────────────────────────────
+
         tools = [
             Tool.from_function(
                 name="direct_reply",
@@ -530,14 +545,8 @@ class TextAssistant:
             ),
         ]
 
-        llm = ChatGoogleGenerativeAI(
-            model=settings.GEMINI_MODEL,
-            temperature=settings.GEMINI_TEMPERATURE,
-            google_api_key=settings.GEMINI_API_KEY,
-        )
-
         agent = create_react_agent(
-            llm=llm,
+            llm=self._llm,
             tools=tools,
             prompt=PromptTemplate.from_template(_PROMPT),
         )
@@ -549,5 +558,6 @@ class TextAssistant:
             verbose=settings.AGENT_VERBOSE,
             handle_parsing_errors=True,
             max_iterations=settings.AGENT_MAX_ITERATIONS,
-            early_stopping_method="generate",
+            early_stopping_method="force",
+            return_intermediate_steps=False,
         )
