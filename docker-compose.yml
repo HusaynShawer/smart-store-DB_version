@@ -1,35 +1,54 @@
-services:
-  mysql:
-    image: mysql:8.2
-    container_name: zaki_mysql
-    restart: always
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: zakiroot
-      MYSQL_DATABASE: zaki_store
-      MYSQL_USER: zaki
-      MYSQL_PASSWORD: zakipass
-    volumes:
-      - zaki_mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uzaki", "-pzakipass"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+# docker-compose.yml
+# متجر زكي AI Agent — PostgreSQL + pgvector · FastAPI backend · nginx frontend
+#
+# Quick start:
+#   cp .env.example .env   # fill in your API keys
+#   docker compose up --build --wait
+#   open http://localhost:8080   (frontend)
+#   open http://localhost:8000/docs (API)
 
-  api:
-    build: .
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: zaki_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zaki}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zakipass}
+      POSTGRES_DB: ${POSTGRES_DB:-zaki_store}
+    ports:
+      - "${POSTGRES_PORT_MAPPED:-5433}:5432"
+    volumes:
+      - zaki_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  backend:
+    build: ./backend
     container_name: zaki_api
-    restart: always
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     depends_on:
-      mysql:
+      db:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  frontend:
+    build: ./frontend
+    container_name: zaki_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
 volumes:
-  zaki_mysql_data:
+  zaki_db_data:
