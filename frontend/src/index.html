@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>متجر زكي — المساعد الذكي</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">ض</div>
+        <div>
+          <h1>متجر زكي</h1>
+          <p class="tagline">المساعد الذكي</p>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="chat">المحادثة</button>
+        <button class="tab" data-tab="admin">الإدارة</button>
+      </nav>
+    </header>
+
+    <!-- Chat panel -->
+    <main id="panel-chat" class="panel">
+      <div class="messages" id="messages">
+        <div class="msg bot">
+          <div class="bubble">أهلاً وسهلاً! 🛍️ أنا مساعد متجر زكي<br>قولي عايز إيه وأنا أدور عليه — أو ارفع صورة منتج، أو سجّل صوتك.</div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="customer-row">
+          <input id="nameInput" type="text" placeholder="اسمك (للطلب)">
+          <input id="phoneInput" type="tel" placeholder="رقم تليفونك (للطلب)">
+        </div>
+        <div id="imgPreview" class="img-preview hidden"></div>
+        <div class="input-row">
+          <label class="icon-btn" title="صورة منتج">
+            <input id="imageInput" type="file" accept="image/*" hidden>
+            <span>🖼️</span>
+          </label>
+          <button id="micBtn" type="button" class="icon-btn" title="صوت">🎤</button>
+          <input id="textInput" type="text" placeholder="اكتب رسالتك..." autocomplete="off">
+          <button id="sendBtn" class="send-btn">إرسال</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Admin panel -->
+    <main id="panel-admin" class="panel hidden">
+      <div class="admin-layout">
+        <aside class="admin-menu">
+          <button class="admin-nav active" data-entity="products">المنتجات</button>
+          <button class="admin-nav" data-entity="stores">المتاجر</button>
+          <button class="admin-nav" data-entity="orders">الطلبات</button>
+          <button class="admin-nav" data-entity="sessions">المحادثات</button>
+        </aside>
+        <section class="admin-content" id="admin-content">
+          <div class="loading">جاري التحميل...</div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Product picker modal -->
+    <div id="modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>تفاصيل الطلب</h3>
+          <button class="icon-btn" id="modalClose">✕</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
